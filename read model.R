@@ -1,9 +1,15 @@
+ 
+# install.packages(c('recipes','DALEX','xgboost','caret','RColorBrewer'))
+# devtools::install_github(c('thomasp85/lime',"pbiecek/breakDown","pbiecek/DALEX"))
 
-# install.packages(c('recipes','lime','DALEX','xgboost','caret'))
-# devtools::install_github('thomasp85/lime')
 # prereq ------------------------------------------------------------------
+require(ggthemes)
+require(RColorBrewer)
 require(readxl)
 library(recipes)
+require(car)
+require(caret)
+require(pROC)
 require(tidyverse)
 require(lime)
 require(DALEX)
@@ -11,6 +17,8 @@ require(xgboost)
 
 dir <- 'data/WA_Fn-UseC_-HR-Employee-Attrition.xlsx'
 dir_res <- 'data/data_for_mod.csv'
+
+
 # functions ---------------------------------------------------------------
 
 
@@ -44,14 +52,75 @@ df_sum %>%
   ggplot(aes(value,fill = Attrition)) +
   geom_histogram(stat="count") +
   facet_wrap(c('parameter'),scales = 'free') +
-  theme_bw() +
+  theme_pander() +
+  scale_fill_brewer(palette = "Paired") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+df_sum %>% 
+  filter(!(parameter %in% col_con)) %>% 
+  group_by(parameter,value) %>% 
+  count(Attrition) %>% 
+  ungroup() %>% 
+  group_by(parameter,value) %>% 
+  mutate(prob = n/(n[Attrition == 'No'] + n[Attrition == 'Yes'])) %>% 
+  ggplot(aes(value,prob *100, fill = Attrition)) +
+  geom_col() +
+  labs(y = "Percentage") +
+  facet_wrap(c('parameter'),scales = 'free') +
+  theme_pander() +
+  scale_fill_brewer(palette = "Paired") +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
 
 
+df %>% 
+  ggplot(aes(y = YearsSinceLastPromotion, x = YearsAtCompany, colour = OverTime)) + 
+  geom_jitter(size = 2, alpha = 0.8) + 
+  geom_smooth(method = "gam") + 
+  facet_wrap(~ Attrition,labeller = 'label_both') + 
+  theme_pander() +
+  scale_color_brewer(palette = "Paired")
 
 
-# prap data for modeling -----------------------------------------------------
+
+
+df_sum %>% 
+  filter((parameter %in% col_con)) %>% 
+  mutate(value = as.numeric(value)) %>% 
+  ggplot(aes(value,fill = Attrition)) +
+  geom_density(alpha = 0.7) +
+  facet_wrap(c('parameter'),scales = 'free') +
+  theme_pander() +
+  scale_fill_brewer(palette = "Paired") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+library(GGally)
+pp <- df_sum %>% 
+  filter((parameter %in% col_con)) %>% 
+  mutate(value = as.numeric(value)) %>% 
+  spread(parameter,value) %>% 
+  select(-id) %>% 
+  ggpairs(aes(col = Attrition,alpha = 0.4),
+          columns = c(2:12),
+          lower = list(continuous = "smooth"), 
+          cardinality_threshold = 60 ) +
+  theme_pander()
+for(i in 1:pp$nrow) {
+  for(j in 1:pp$ncol){
+    pp[i,j] <- pp[i,j] + 
+      scale_fill_brewer(palette = "Paired") +
+      scale_color_brewer(palette = "Paired")
+  }
+}
+  
+pp
+
+unique(df$JobRole)
+
+
+
+
+# prep data for modeling -----------------------------------------------------
 
 recipe_obj <- df %>%
   recipe(formula = ~ .) %>%
@@ -68,9 +137,10 @@ df_model <- bake(recipe_obj, newdata = df)
 df_model <- df_model %>% 
   mutate_if(is.character,as_factor)
 #write data for h2o
-write_csv(df_model, dir_res)
+#write_csv(df_model, dir_res)
 
-
+levels(df_model$JobRole) <- c("HlRep", "HR", "LabTech", "Man", "ManDir", "ResDir", "ResSci", "SalEx", "SalRep")
+levels(df_model$EducationField) <- c("HR", "LSci", "Mar", "Med", "Other", "TechDir")
 
 # split data --------------------------------------------------------------
 
@@ -86,20 +156,33 @@ test <- df_model[-train_ind, ]
 # modeling ----------------------------------------------------------------
 
 #GLM
-mod_glm <- caret::train(Attrition ~.,
+mod_glm <- train(Attrition ~.,
                         family = 'binomial',
                         data = train,
                         method = 'glm')
+summary(mod_glm)
+
+preds <- predict(mod_glm, test)
+rocv <- roc(as.numeric(test$Attrition), as.numeric(preds))
+rocv$auc
+
+prop.table(table(test$Attrition, preds, dnn = c("Actual", "Predicted")),1)
+
 
 #Xgboost
 train_mod_matrix <- model.matrix(Attrition ~.-1,
                                  data = mutate(train,Attrition = as.numeric(Attrition) - 1) )
 train_xgb <- xgb.DMatrix(data = train_mod_matrix ,
                          label = as.numeric(train$Attrition) - 1 )
+
 param <- list(objective = "binary:logistic",num_parallel_tree = 5,
               max_depth = 2, eta = 1, silent = 1, nthread = 2)
 mod_xgb <- xgboost(params = param,data = train_xgb,nrounds = 50)
+preds <- predict(mod_xgb, xgb.DMatrix(test))
+rocv <- roc(as.numeric(test$Attrition), as.numeric(preds))
+rocv$auc
 
+prop.table(table(test$Attrition, preds, dnn = c("Actual", "Predicted")),1)
 
 # explain by LIME ---------------------------------------------------------------
 
@@ -148,7 +231,7 @@ explainer_xgb
 col_con
 
 sv_xgb_satisfaction_level  <- single_variable(explainer_xgb, 
-                                              variable = "OverTimeYes", 
+                                              variable = "YearsInCurrentRole", 
                                               type = "pdp")
 head(sv_xgb_satisfaction_level)
 plot(sv_xgb_satisfaction_level)+ theme_bw()
