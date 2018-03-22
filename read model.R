@@ -115,10 +115,6 @@ for(i in 1:pp$nrow) {
   
 pp
 
-unique(df$JobRole)
-
-
-
 
 # prep data for modeling -----------------------------------------------------
 
@@ -160,7 +156,7 @@ mod_glm <- train(Attrition ~.,
                         family = 'binomial',
                         data = train,
                         method = 'glm')
-summary(mod_glm)
+# summary(mod_glm)
 
 preds <- predict(mod_glm, test)
 rocv <- roc(as.numeric(test$Attrition), as.numeric(preds))
@@ -170,19 +166,106 @@ prop.table(table(test$Attrition, preds, dnn = c("Actual", "Predicted")),1)
 
 
 #Xgboost
+
+num.folds <- 4
 train_mod_matrix <- model.matrix(Attrition ~.-1,
                                  data = mutate(train,Attrition = as.numeric(Attrition) - 1) )
 train_xgb <- xgb.DMatrix(data = train_mod_matrix ,
                          label = as.numeric(train$Attrition) - 1 )
 
-param <- list(objective = "binary:logistic",num_parallel_tree = 5,
-              max_depth = 2, eta = 1, silent = 1, nthread = 2)
-mod_xgb <- xgboost(params = param,data = train_xgb,nrounds = 50)
-preds <- predict(mod_xgb, xgb.DMatrix(test))
-rocv <- roc(as.numeric(test$Attrition), as.numeric(preds))
-rocv$auc
+test_mod_matrix <- model.matrix(Attrition ~.-1,
+                         data = mutate(test,Attrition = as.numeric(Attrition) - 1) )
+test_xgb <- xgb.DMatrix(data = test_mod_matrix ,
+                         label = as.numeric(test$Attrition) - 1 )
 
-prop.table(table(test$Attrition, preds, dnn = c("Actual", "Predicted")),1)
+sumwpos <- sum((as.numeric(train$Attrition)==2))
+sumwneg <- sum(as.numeric(train$Attrition)==1)
+
+param <- list("objective" = "binary:logistic",
+              "scale_pos_weight" = sumwneg / sumwpos,
+              "bst:eta" = 0.1,
+              "bst:max_depth" = 6,
+              "eval_metric" = "auc",
+              "eval_metric" = "ams@0.15",
+              "silent" = 1,
+              "nthread" = 16)
+
+trControl = trainControl(
+  method = 'cv',
+  number = 5,
+  # summaryFunction = giniSummary,
+  classProbs = TRUE,
+  verboseIter = TRUE,
+  allowParallel = TRUE)
+
+# create the tuning grid. Again keeping this small to avoid exceeding kernel memory limits.
+# You can expand as your compute resources allow. 
+tuneGridXGB <- expand.grid(
+  nrounds=c(200,350),
+  max_depth = c(4, 10),
+  eta = c(0.05, 0.1),
+  gamma = c(0.01,0.1,0.5),
+  colsample_bytree = c(0.75,3,5,8),
+  subsample = c(0.50,0.7),
+  min_child_weight = c(0,0.5,3))
+
+start <- Sys.time()
+
+# train the xgboost learner
+xgbmod <- train(
+  x = train[,-2],
+  y = train$Attrition,
+  method = 'xgbTree',
+  metric = 'AUC',
+  trControl = trControl,
+  # tuneGrid = tuneGridXGB,
+  objective = "binary:logit")
+
+
+mod_xgb <- xgb.cv(param,data = train_xgb,
+                  nrounds = 300,
+                  nfold = 9,metrics = 'auc')
+mod_xgb$evaluation_log
+
+
+
+# make predictions
+preds <- predict(mod_xgb, newdata = test_mod_xgb, type = "prob")
+preds_final <- predict(xgbmod, newdata = dtest, type = "prob")
+
+
+# convert test target values back to numeric for gini and roc.plot functions
+levels(y_test) <- c("0", "1")
+y_test_raw <- as.numeric(levels(y_test))[y_test]
+
+# Diagnostics
+print(xgbmod$results)
+print(xgbmod$resample)
+
+# plot results (useful for larger tuning grids)
+plot(xgbmod)
+
+# score the predictions against test data
+normalizedGini(y_test_raw, preds$Yes)
+
+# plot the ROC curve
+roc.plot(y_test_raw, preds$Yes, plot.thres = c(0.02, 0.03, 0.04, 0.05))
+
+# prep the predictions for submissions
+sub <- data.frame(id = as.integer(dtest$id), target = preds_final$Yes)
+
+
+
+
+
+
+summary(mod_xgb)
+
+preds <- predict(mod_xgb, test_xgb,type = 'class')
+rocv <- roc(as.numeric(test$Attrition),prediction)
+rocv$auc
+prediction <- as.numeric(preds > 0.5)
+prop.table(table(test$Attrition, prediction, dnn = c("Actual", "Predicted")),1)
 
 # explain by LIME ---------------------------------------------------------------
 
