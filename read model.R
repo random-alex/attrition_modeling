@@ -1,5 +1,5 @@
- 
-# install.packages(c('recipes','DALEX','xgboost','caret','RColorBrewer'))
+ # install.packages('DiagrammeR')
+# install.packages(c('recipes','DALEX','xgboost','caret','RColorBrewer','ggthemes','pROC','GGally',"DiagrammeR",'Ckmeans.1d.dp'))
 # devtools::install_github(c('thomasp85/lime',"pbiecek/breakDown","pbiecek/DALEX"))
 
 # prereq ------------------------------------------------------------------
@@ -14,7 +14,7 @@ require(tidyverse)
 require(lime)
 require(DALEX)
 require(xgboost)
-
+require(GGally)
 dir <- 'data/WA_Fn-UseC_-HR-Employee-Attrition.xlsx'
 dir_res <- 'data/data_for_mod.csv'
 
@@ -47,6 +47,10 @@ res <- df_sum %>%
   filter(!(parameter %in% col_con)) %>% 
   count(parameter, value) 
 
+
+# some plots for factor data ----------------------------------------------
+
+
 df_sum %>% 
   filter(!(parameter %in% col_con)) %>% 
   ggplot(aes(value,fill = Attrition)) +
@@ -71,6 +75,27 @@ df_sum %>%
   scale_fill_brewer(palette = "Paired") +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
+df_sum %>% 
+  filter(!(parameter %in% col_con)) %>% 
+  group_by(parameter,value) %>% 
+  count(Attrition) %>% 
+  ungroup() %>% 
+  group_by(parameter,value) %>% 
+  mutate(prob = n/(n[Attrition == 'No'] + n[Attrition == 'Yes'])) %>% 
+  filter(Attrition == 'Yes') %>% 
+  ungroup() %>% 
+  arrange(desc(prob)) %>% 
+  .[1:10,] %>% 
+  mutate(par = as_factor(str_c(parameter,' : \n',value))) %>% 
+  ggplot(aes(par,prob,fill = Attrition)) +
+  geom_col() +
+  theme_pander(lp = 'None') +
+  labs(y = "Percentage", x = '') +
+  scale_fill_brewer(palette = "Paired")
+
+
+
+# some plots for count data -----------------------------------------------
 
 
 df %>% 
@@ -94,7 +119,7 @@ df_sum %>%
   scale_fill_brewer(palette = "Paired") +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
-library(GGally)
+
 pp <- df_sum %>% 
   filter((parameter %in% col_con)) %>% 
   mutate(value = as.numeric(value)) %>% 
@@ -117,13 +142,14 @@ pp
 
 
 # prep data for modeling -----------------------------------------------------
-
+col_char <- setdiff(colnames(df),c(col_con,'id'))
 recipe_obj <- df %>%
   recipe(formula = ~ .) %>%
   step_rm(id) %>%
   step_zv(all_predictors()) %>%
   step_center(col_con) %>%
   step_scale(col_con) %>%
+  step_dummy(all_nominal()) %>% 
   # step_string2factor(Attrition) %>%
   prep(data = df)
 recipe_obj
@@ -157,7 +183,7 @@ mod_glm <- train(Attrition ~.,
                         data = train,
                         method = 'glm')
 # summary(mod_glm)
-
+mod_glm$metric
 preds <- predict(mod_glm, test)
 rocv <- roc(as.numeric(test$Attrition), as.numeric(preds))
 rocv$auc
@@ -189,50 +215,53 @@ param <- list("objective" = "binary:logistic",
               "eval_metric" = "ams@0.15",
               "silent" = 1,
               "nthread" = 16)
-
-trControl = trainControl(
-  method = 'cv',
-  number = 5,
-  # summaryFunction = giniSummary,
-  classProbs = TRUE,
-  verboseIter = TRUE,
-  allowParallel = TRUE)
-
-# create the tuning grid. Again keeping this small to avoid exceeding kernel memory limits.
-# You can expand as your compute resources allow. 
-tuneGridXGB <- expand.grid(
-  nrounds=c(200,350),
-  max_depth = c(4, 10),
-  eta = c(0.05, 0.1),
-  gamma = c(0.01,0.1,0.5),
-  colsample_bytree = c(0.75,3,5,8),
-  subsample = c(0.50,0.7),
-  min_child_weight = c(0,0.5,3))
-
-start <- Sys.time()
-
-# train the xgboost learner
-xgbmod <- train(
-  x = train[,-2],
-  y = train$Attrition,
-  method = 'xgbTree',
-  metric = 'AUC',
-  trControl = trControl,
-  # tuneGrid = tuneGridXGB,
-  objective = "binary:logit")
-
+{
+# 
+# trControl = trainControl(
+#   method = 'cv',
+#   number = 5,
+#   # summaryFunction = giniSummary,
+#   classProbs = TRUE,
+#   verboseIter = TRUE,
+#   allowParallel = TRUE)
+# 
+# # create the tuning grid. Again keeping this small to avoid exceeding kernel memory limits.
+# # You can expand as your compute resources allow. 
+# tuneGridXGB <- expand.grid(
+#   nrounds=c(200,350),
+#   max_depth = c(4, 10),
+#   eta = c(0.05, 0.1),
+#   gamma = c(0.01,0.1,0.5),
+#   colsample_bytree = c(0.75,3,5,8),
+#   subsample = c(0.50,0.7),
+#   min_child_weight = c(0,0.5,3))
+# 
+# start <- Sys.time()
+# 
+# # train the xgboost learner
+# xgbmod <- train(
+#   x = train[,-2],
+#   y = train$Attrition,
+#   method = 'xgbTree',
+#   metric = 'AUC',
+#   trControl = trControl,
+#   # tuneGrid = tuneGridXGB,
+#   objective = "binary:logit")
+} 
 
 mod_xgb <- xgb.cv(param,data = train_xgb,
                   nrounds = 300,
                   nfold = 9,metrics = 'auc')
 mod_xgb$evaluation_log
+params <- mod_xgb$params
 
-
-
+mod_xgb <- xgb.train(params,data = train_xgb,nrounds = 300)
 # make predictions
-preds <- predict(mod_xgb, newdata = test_mod_xgb, type = "prob")
-preds_final <- predict(xgbmod, newdata = dtest, type = "prob")
-
+preds <- predict(mod_xgb, newdata = test_xgb, type = "prob")
+summary(mod_xgb)
+mod_xgb_imp <- xgb.importance(model = mod_xgb,feature_names = colnames(train_xgb))
+xgb.ggplot.importance(mod_xgb_imp)
+xgb.plot.multi.trees(mod_xgb)
 
 # convert test target values back to numeric for gini and roc.plot functions
 levels(y_test) <- c("0", "1")
@@ -282,7 +311,7 @@ explanation <- lime::explain(
   to_exp[,-2],
   single_explanation = T,
   explainer = explainer,
-  n_labels = 2,
+  n_labels = 1,
   n_features = 5)
 
 # Error: All permutations have no similarity to the original observation.
@@ -293,7 +322,7 @@ plot_features(explanation)
 
 plot_explanations(explanation)
 
-tibble::glimpse(explanation)
+s
 
 
 
@@ -319,6 +348,22 @@ sv_xgb_satisfaction_level  <- single_variable(explainer_xgb,
 head(sv_xgb_satisfaction_level)
 plot(sv_xgb_satisfaction_level)+ theme_bw()
 
+
+
+expl_dalex_glm <- explain(mod_glm,
+                          data = train,
+                          y = train$Attrition,
+                          label = 'glm')
+expl_dalex_xgb <- explain(mod_xgb, 
+                         data = train_mod_matrix, 
+                         y = train$Attrition, 
+                         label = "xgboost")
+
+expl_dalex_glm_sin <- single_variable(explainer = expl_dalex_glm,variable = 'DistanceFromHome')
+expl_dalex_xgb_sin <- single_variable(explainer = expl_dalex_xgb,variable = 'DistanceFromHome')
+plot(expl_dalex_glm_sin,expl_dalex_xgb_sin)
+res <- variable_dropout(expl_dalex_xgb,type = 'raw')
+plot(res)
 
 
 
