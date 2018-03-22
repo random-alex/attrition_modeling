@@ -1,8 +1,9 @@
 
+# install.packages(c('recipes','lime','DALEX','xgboost','caret'))
+# devtools::install_github('thomasp85/lime')
 # prereq ------------------------------------------------------------------
 require(readxl)
 library(recipes)
-
 require(tidyverse)
 require(lime)
 require(DALEX)
@@ -15,13 +16,14 @@ dir_res <- 'data/data_for_mod.csv'
 
 # read and preproc file ---------------------------------------------------------------
 
+
 df <- read_excel(dir) %>% 
   # mutate_if(is.character,as_factor) %>% 
   rename(id = EmployeeNumber) %>% 
   #equal for all employers
   select(-c(EmployeeCount,Over18,StandardHours))
-col_con <- c("Age", 'DailyRate', 'HourlyRate','MonthlyIncome','MonthlyRate','TotalWorkingYears',
-             'DistanceFromHome', 
+col_con <- c("Age", 'DailyRate', 'HourlyRate','MonthlyIncome','MonthlyRate',
+             'TotalWorkingYears','DistanceFromHome', 
              'YearsAtCompany', 'YearsInCurrentRole',	'YearsSinceLastPromotion',	'YearsWithCurrManager')
 
 df_sum <- df %>% 
@@ -107,8 +109,8 @@ explainer <- lime(
   bin_continuous = T,quantile_bins = T)
 
 to_exp <- as.data.frame(test) %>% 
-  filter(OverTime == 'Yes') %>% 
-  .[1:3,]
+  # filter(OverTime == 'Yes') %>% 
+  .[1:5,]
 
 explanation <- lime::explain(
   to_exp[,-2],
@@ -122,6 +124,7 @@ explanation <- lime::explain(
 
 #Cannot Continue
 plot_features(explanation)
+
 plot_explanations(explanation)
 
 tibble::glimpse(explanation)
@@ -134,6 +137,7 @@ tibble::glimpse(explanation)
 # Explain using DALEX -----------------------------------------------------------
 
 
+
 explainer_xgb <- explain(mod_xgb, 
                          data = train_mod_matrix, 
                          y = train$Attrition, 
@@ -144,10 +148,10 @@ explainer_xgb
 col_con
 
 sv_xgb_satisfaction_level  <- single_variable(explainer_xgb, 
-                                              variable = "DailyRate", 
-                                              type = "ale")
+                                              variable = "OverTimeYes", 
+                                              type = "pdp")
 head(sv_xgb_satisfaction_level)
-plot(sv_xgb_satisfaction_level)
+plot(sv_xgb_satisfaction_level)+ theme_bw()
 
 
 
