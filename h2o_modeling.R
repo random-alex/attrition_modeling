@@ -12,7 +12,7 @@ require(h2o)
 require(lime)
 
 dir <- 'data/data_for_mod.csv'
-h2o.init(nthreads = 3)
+h2o.init(nthreads = 11)
 seed = 1
 
 # functions ---------------------------------------------------------------
@@ -70,7 +70,7 @@ print(x)
   
   #grid search for alpha parameter
   # select the values for `alpha` to grid over
-  hyper_params <- list( alpha = c(0, .025, .05, .075, .1) )
+  hyper_params <- list( alpha = seq(0, 1,length.out = 20) )
   
   # this example uses cartesian grid search because the search space is small
   # and we want to see the performance of all models. For a larger search space use
@@ -104,10 +104,10 @@ print(x)
                            lambda_search = T,
                            balance_classes = T,
                            family = "binomial")  #similar to R's glm, h2o.glm has the family argument
-  h2o.auc(glm_fit_tuned)
+  h2o.auc(glm_fit_tuned,T,T)
   h2o.performance(glm_fit_tuned)
   glm_predict <- h2o.performance(glm_fit_tuned,test)
-  h2o.auc(glm_predict)
+  h2o.auc(glm_predict,train = T,valid = T)
 }
 
 # try to explain result ---------------------------------------------------
@@ -115,20 +115,21 @@ h2o.varimp_plot(glm_fit_tuned)
 h2o.varimp(glm_fit_tuned)
 
 explainer <- lime(
-  as.data.frame(train[,-2]),
+  as.data.frame(train[,-1]),
   model = glm_fit_tuned,
-  bin_continuous = T,quantile_bins = T)
+  n_bins = 4,
+  bin_continuous = T)
 
 to_exp <- as.data.frame(test) %>% 
-  filter(OverTime == 'Yes') %>% 
-  .[1:3,]
+  # filter(OverTime_Yes == 1) %>% 
+  .[1:140,]
 
 explanation <- explain(
-  to_exp[,-2],
+  to_exp[,-1],
   # single_explanation = T,
   explainer = explainer,
-  n_labels = 2,
-  n_features = 5)
+  n_labels = 1,
+  n_features = 2)
 
 # Error: All permutations have no similarity to the original observation.
 # Try setting bin_continuous to TRUE and/or increase kernel_size
@@ -139,4 +140,51 @@ plot_features(explanation)
 plot_explanations(explanation)
 tibble::glimpse(explanation)
 
+
+
+
+
+
+# now lets try autoML -----------------------------------------------------
+
+aml <- h2o.automl(y = y, x = x,
+                  training_frame = train,
+                  max_models = 10,
+                  seed = 1)
+# Get model ids for all models in the AutoML Leaderboard
+model_ids <- as.data.frame(aml@leaderboard$model_id)[,1]
+# Get the "All Models" Stacked Ensemble model
+se <- h2o.getModel(grep("StackedEnsemble_AllModels", model_ids, value = TRUE)[1])
+# Get the Stacked Ensemble metalearner model
+metalearner <- h2o.getModel(se@model$metalearner$name)
+
+
+# try to explain ----------------------------------------------------------
+h2o.varimp(metalearner)
+
+explainer <- lime(
+  as.data.frame(train[,-1]),
+  model = metalearner,
+  n_bins = 4,
+  bin_continuous = T)
+
+to_exp <- as.data.frame(test) %>% 
+  filter(OverTime_Yes == 1) %>% 
+  .[1:3,] 
+
+explanation <- explain(
+  to_exp[,-1],
+  single_explanation = T,
+  explainer = explainer,
+  n_labels = 1,
+  n_features = 5)
+
+# Error: All permutations have no similarity to the original observation.
+# Try setting bin_continuous to TRUE and/or increase kernel_size
+
+#Cannot Continue
+plot_features(explanation)
+
+plot_explanations(explanation)
+tibble::glimpse(explanation)
 

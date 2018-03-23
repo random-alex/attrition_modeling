@@ -1,0 +1,130 @@
+---
+title: "Attrition"
+author: "Zotov A.V."
+date: '23 марта 2018 г '
+output: html_document
+---
+
+```{r setup, include=F, echo=FALSE}
+require(ggthemes)
+require(RColorBrewer)
+require(readxl)
+require(plotly)
+require(zoo)
+library(recipes)
+require(car)
+require(caret)
+require(pROC)
+require(tidyverse)
+require(lime)
+require(DALEX)
+require(xgboost)
+require(GGally)
+knitr::opts_chunk$set(echo = TRUE)
+dir <- 'data/WA_Fn-UseC_-HR-Employee-Attrition.xlsx'
+dir_res <- 'data/data_for_mod.csv'
+
+df <- read_excel(dir) %>% 
+  rename(id = EmployeeNumber) %>% 
+  #equal for all employers
+  select(-c(EmployeeCount,Over18,StandardHours))
+col_con <- c("Age", 'DailyRate', 'HourlyRate','MonthlyIncome','MonthlyRate',
+             'TotalWorkingYears','DistanceFromHome', 
+             'YearsAtCompany', 'YearsInCurrentRole',	'YearsSinceLastPromotion',	'YearsWithCurrManager')
+
+df_def <- read_excel(dir,2) %>% 
+  mutate(group = na.locf(group)) %>% 
+  separate('value',c('value_old','value_new'),sep = " '") %>% 
+  mutate(value_new = str_replace_all(value_new,"'",''))
+col_nes <- unique(df_def$group)
+
+df_sum <- df %>% 
+  gather(parameter,value,-c(id,Attrition)) 
+df_tmp <- df_sum %>% 
+  filter(parameter %in% col_nes) %>% 
+  left_join(df_def, by = c("parameter" = "group",'value' = 'value_old')) %>% 
+  mutate(value = value_new) %>% 
+  select(-value_new)
+
+df_sum <- df_sum %>% 
+  filter(!(parameter %in% col_nes)) %>% 
+  bind_rows(df_tmp)
+
+
+
+df_sum %>% 
+  filter(parameter %in% col_con ) %>% 
+  spread(parameter,value) %>% 
+  .[,-c(1,2)] %>% 
+  mutate_if(is.character,as.numeric) %>% 
+  summary()
+
+res <- df_sum %>% 
+  filter(!(parameter %in% c(col_con))) %>% 
+  count(parameter, value) 
+```
+
+
+## Motivation
+This my attempt to tell you story, that get from that data. 
+Where is highest percent of dismissal from work? How does overtime connect with attrition?  Is gender really matter? And many more, if you sit dawn and spend some of you time to read my report)
+
+## Prepare data for EDA
+So, when I usually begin to discover history from data, I spend many hours prepare and cleaning dataset, but not now! Today I have nice, prepared dataset, and need only to do some magic staff in case of better visualization. 
+
+
+## Ordinal data
+Let's begin from ordinal data, just becouse I want :). Let's see how many attrition in each category of each parameter we have.
+```{r ,echo=FALSE, fig.height = 34, fig.width = 34, fig.align = "center",out.width = '120%'}
+df_sum %>% 
+  filter(!(parameter %in% col_con)) %>% 
+  ggplot(aes(value,fill = Attrition)) +
+  geom_histogram(stat="count",binwidth = 2) +
+  facet_wrap(c('parameter'),scales = 'free') +
+  labs(x = '') +
+  theme_pander(base_size = 35) +
+  scale_fill_brewer(palette = "Paired") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+
+```
+
+
+A little bit difficult to understand graph due to imbalanced classes… Let’s invite old friend percent to this party!
+
+
+```{r ,echo=FALSE, fig.height = 34, fig.width = 34, fig.align = "center"}
+df_sum %>% 
+  filter(!(parameter %in% col_con)) %>% 
+  group_by(parameter,value) %>% 
+  count(Attrition) %>% 
+  ungroup() %>% 
+  group_by(parameter,value) %>% 
+  mutate(prob = n/(n[Attrition == 'No'] + n[Attrition == 'Yes'])) %>% 
+  ggplot(aes(value,prob *100, fill = Attrition)) +
+  geom_col() +
+  labs(y = "Percentage", x = '') +
+  facet_wrap(c('parameter'),scales = 'free') +
+  theme_pander(base_size = 35) +
+  scale_fill_brewer(palette = "Paired") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.

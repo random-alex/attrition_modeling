@@ -1,11 +1,13 @@
- # install.packages('DiagrammeR')
-# install.packages(c('recipes','DALEX','xgboost','caret','RColorBrewer','ggthemes','pROC','GGally',"DiagrammeR",'Ckmeans.1d.dp'))
+ # install.packages('Ckmeans.1d.dp')
+# install.packages(c('recipes','DALEX','xgboost','caret',
+#                    'RColorBrewer','ggthemes','pROC','GGally',"DiagrammeR",'Ckmeans.1d.dp'))
 # devtools::install_github(c('thomasp85/lime',"pbiecek/breakDown","pbiecek/DALEX"))
 
 # prereq ------------------------------------------------------------------
 require(ggthemes)
 require(RColorBrewer)
 require(readxl)
+require(zoo)
 library(recipes)
 require(car)
 require(caret)
@@ -34,24 +36,42 @@ col_con <- c("Age", 'DailyRate', 'HourlyRate','MonthlyIncome','MonthlyRate',
              'TotalWorkingYears','DistanceFromHome', 
              'YearsAtCompany', 'YearsInCurrentRole',	'YearsSinceLastPromotion',	'YearsWithCurrManager')
 
+df_def <- read_excel(dir,2) %>% 
+  mutate(group = na.locf(group)) %>% 
+  separate('value',c('value_old','value_new'),sep = " '") %>% 
+  mutate(value_new = str_replace_all(value_new,"'",''))
+col_nes <- unique(df_def$group)
+
 df_sum <- df %>% 
   gather(parameter,value,-c(id,Attrition)) 
+df_tmp <- df_sum %>% 
+  filter(parameter %in% col_nes) %>% 
+  left_join(df_def, by = c("parameter" = "group",'value' = 'value_old')) %>% 
+  mutate(value = value_new) %>% 
+  select(-value_new)
+
+df_sum <- df_sum %>% 
+  filter(!(parameter %in% col_nes)) %>% 
+  bind_rows(df_tmp)
+
+
 
 df_sum %>% 
-  filter(parameter %in% col_con) %>% 
+  filter(parameter %in% col_con ) %>% 
   spread(parameter,value) %>% 
+  .[,-c(1,2)] %>% 
   mutate_if(is.character,as.numeric) %>% 
   summary()
 
 res <- df_sum %>% 
-  filter(!(parameter %in% col_con)) %>% 
+  filter(!(parameter %in% c(col_con))) %>% 
   count(parameter, value) 
 
 
 # some plots for factor data ----------------------------------------------
 
 
-df_sum %>% 
+gg <- df_sum %>% 
   filter(!(parameter %in% col_con)) %>% 
   ggplot(aes(value,fill = Attrition)) +
   geom_histogram(stat="count") +
@@ -92,6 +112,24 @@ df_sum %>%
   theme_pander(lp = 'None') +
   labs(y = "Percentage", x = '') +
   scale_fill_brewer(palette = "Paired")
+
+df %>% 
+  filter(JobRole == 'Sales Representative' &JobInvolvement == '1') %>%
+  # filter(JobInvolvement == '1') %>% 
+  gather(parameter,value,-c(id,Attrition,JobRole)) %>% 
+  filter(!(parameter %in% col_con)) %>% 
+  # group_by(parameter,value) %>% 
+  # count(Attrition) %>% 
+  # ungroup() %>% 
+  # group_by(parameter,value) %>% 
+  ggplot(aes(value,fill = Attrition)) +
+  geom_histogram(stat="count") +
+  facet_wrap(c('parameter'),scales = 'free') +
+  theme_pander() +
+  scale_fill_brewer(palette = "Paired") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+
 
 
 
@@ -142,27 +180,32 @@ pp
 
 
 # prep data for modeling -----------------------------------------------------
-col_char <- setdiff(colnames(df),c(col_con,'id'))
-recipe_obj <- df %>%
+
+df_model <- df_sum %>% 
+  spread(parameter,value) %>% 
+  mutate_at(vars(c(col_con,'PercentSalaryHike','NumCompaniesWorked')),funs(as.numeric))
+df_model$Attrition <- as.numeric(as.factor(df_model$Attrition)) - 1
+
+recipe_obj <- df_model %>% 
   recipe(formula = ~ .) %>%
   step_rm(id) %>%
   step_zv(all_predictors()) %>%
-  step_center(col_con) %>%
-  step_scale(col_con) %>%
+  # step_center(col_con) %>%
+  # step_scale(col_con) %>%
   step_dummy(all_nominal()) %>% 
   # step_string2factor(Attrition) %>%
   prep(data = df)
 recipe_obj
 
-df_model <- bake(recipe_obj, newdata = df)
+df_model <- bake(recipe_obj, newdata = df_model)
 
 df_model <- df_model %>% 
   mutate_if(is.character,as_factor)
 #write data for h2o
 #write_csv(df_model, dir_res)
 
-levels(df_model$JobRole) <- c("HlRep", "HR", "LabTech", "Man", "ManDir", "ResDir", "ResSci", "SalEx", "SalRep")
-levels(df_model$EducationField) <- c("HR", "LSci", "Mar", "Med", "Other", "TechDir")
+# levels(df_model$JobRole) <- c("HlRep", "HR", "LabTech", "Man", "ManDir", "ResDir", "ResSci", "SalEx", "SalRep")
+# levels(df_model$EducationField) <- c("HR", "LSci", "Mar", "Med", "Other", "TechDir")
 
 # split data --------------------------------------------------------------
 
@@ -178,34 +221,41 @@ test <- df_model[-train_ind, ]
 # modeling ----------------------------------------------------------------
 
 #GLM
-mod_glm <- train(Attrition ~.,
+mod_glm <- train(as.factor(Attrition) ~ .,
                         family = 'binomial',
                         data = train,
                         method = 'glm')
-# summary(mod_glm)
-mod_glm$metric
+summary(mod_glm)
 preds <- predict(mod_glm, test)
 rocv <- roc(as.numeric(test$Attrition), as.numeric(preds))
 rocv$auc
-
+plot(rocv)
 prop.table(table(test$Attrition, preds, dnn = c("Actual", "Predicted")),1)
 
 
 #Xgboost
 
-num.folds <- 4
+num.folds <- 6
 train_mod_matrix <- model.matrix(Attrition ~.-1,
-                                 data = mutate(train,Attrition = as.numeric(Attrition) - 1) )
+                                 # data = mutate(train,Attrition = as.numeric(Attrition) - 1),
+                                 data = train
+                                 )
 train_xgb <- xgb.DMatrix(data = train_mod_matrix ,
-                         label = as.numeric(train$Attrition) - 1 )
+                         # label = as.numeric(train$Attrition) - 1,
+                         label = as.numeric(train$Attrition)
+                         )
 
 test_mod_matrix <- model.matrix(Attrition ~.-1,
-                         data = mutate(test,Attrition = as.numeric(Attrition) - 1) )
+                         # data = mutate(test,Attrition = as.numeric(Attrition) - 1),
+                         data = test
+                         )
 test_xgb <- xgb.DMatrix(data = test_mod_matrix ,
-                         label = as.numeric(test$Attrition) - 1 )
+                         # label = as.numeric(test$Attrition) - 1 ,
+                        label = as.numeric(test$Attrition)
+                        )
 
-sumwpos <- sum((as.numeric(train$Attrition)==2))
-sumwneg <- sum(as.numeric(train$Attrition)==1)
+sumwpos <- sum((as.numeric(train$Attrition)==1))
+sumwneg <- sum(as.numeric(train$Attrition)==0)
 
 param <- list("objective" = "binary:logistic",
               "scale_pos_weight" = sumwneg / sumwpos,
@@ -250,12 +300,12 @@ param <- list("objective" = "binary:logistic",
 } 
 
 mod_xgb <- xgb.cv(param,data = train_xgb,
-                  nrounds = 300,
-                  nfold = 9,metrics = 'auc')
+                  nrounds = 3000,
+                  nfold = num.folds,metrics = 'auc')
 mod_xgb$evaluation_log
 params <- mod_xgb$params
 
-mod_xgb <- xgb.train(params,data = train_xgb,nrounds = 300)
+mod_xgb <- xgb.train(params,data = train_xgb,nrounds = 3000)
 # make predictions
 preds <- predict(mod_xgb, newdata = test_xgb, type = "prob")
 summary(mod_xgb)
@@ -263,37 +313,14 @@ mod_xgb_imp <- xgb.importance(model = mod_xgb,feature_names = colnames(train_xgb
 xgb.ggplot.importance(mod_xgb_imp)
 xgb.plot.multi.trees(mod_xgb)
 
-# convert test target values back to numeric for gini and roc.plot functions
-levels(y_test) <- c("0", "1")
-y_test_raw <- as.numeric(levels(y_test))[y_test]
-
-# Diagnostics
-print(xgbmod$results)
-print(xgbmod$resample)
-
-# plot results (useful for larger tuning grids)
-plot(xgbmod)
-
-# score the predictions against test data
-normalizedGini(y_test_raw, preds$Yes)
-
-# plot the ROC curve
-roc.plot(y_test_raw, preds$Yes, plot.thres = c(0.02, 0.03, 0.04, 0.05))
-
-# prep the predictions for submissions
-sub <- data.frame(id = as.integer(dtest$id), target = preds_final$Yes)
-
-
-
-
-
-
-summary(mod_xgb)
-
 preds <- predict(mod_xgb, test_xgb,type = 'class')
-rocv <- roc(as.numeric(test$Attrition),prediction)
+rocv <- roc(as.numeric(test$Attrition),preds)
 rocv$auc
-prediction <- as.numeric(preds > 0.5)
+plot(rocv)
+prediction <- as.numeric(preds > 0.01)
+rocv <- roc(as.numeric(test$Attrition),prediction)
+plot(rocv)
+rocv$auc
 prop.table(table(test$Attrition, prediction, dnn = c("Actual", "Predicted")),1)
 
 # explain by LIME ---------------------------------------------------------------
@@ -305,10 +332,10 @@ explainer <- lime(
 
 to_exp <- as.data.frame(test) %>% 
   # filter(OverTime == 'Yes') %>% 
-  .[1:5,]
+  .[1:50,]
 
 explanation <- lime::explain(
-  to_exp[,-2],
+  to_exp[,-1],
   single_explanation = T,
   explainer = explainer,
   n_labels = 1,
@@ -319,10 +346,8 @@ explanation <- lime::explain(
 
 #Cannot Continue
 plot_features(explanation)
-
 plot_explanations(explanation)
 
-s
 
 
 
@@ -341,10 +366,10 @@ explainer_xgb
 
 #single variable
 col_con
-
+mod_xgb_imp
 sv_xgb_satisfaction_level  <- single_variable(explainer_xgb, 
-                                              variable = "YearsInCurrentRole", 
-                                              type = "pdp")
+                                              variable = "OverTime_Yes", 
+                                              type = "ale")
 head(sv_xgb_satisfaction_level)
 plot(sv_xgb_satisfaction_level)+ theme_bw()
 
@@ -362,8 +387,9 @@ expl_dalex_xgb <- explain(mod_xgb,
 expl_dalex_glm_sin <- single_variable(explainer = expl_dalex_glm,variable = 'DistanceFromHome')
 expl_dalex_xgb_sin <- single_variable(explainer = expl_dalex_xgb,variable = 'DistanceFromHome')
 plot(expl_dalex_glm_sin,expl_dalex_xgb_sin)
-res <- variable_dropout(expl_dalex_xgb,type = 'raw')
-plot(res)
+res1 <- variable_dropout(expl_dalex_xgb,type = 'raw')
+res2 <- variable_dropout(expl_dalex_glm,type = 'raw')
+plot(res1,res2)
 
 
 
