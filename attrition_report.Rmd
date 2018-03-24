@@ -66,8 +66,8 @@ res <- df_sum %>%
 
 
 ## Motivation
-This my attempt to tell you story, that get from that data. 
-Where is highest percent of dismissal from work? How does overtime connect with attrition?  Is gender really matter? And many more, if you sit dawn and spend some of you time to read my report)
+Here is my attempt to tell you story, that I received from the data. 
+Where is the highest percent of dismissals from work? How does overtime connect with attrition?  Is gender really matter? And many more, if you sit dawn and spend some of you time to read my report)
 
 ## Prepare data for EDA
 So, when I usually begin to discover history from data, I spend many hours prepare and cleaning dataset, but not now! Today I have nice, prepared dataset, and need only to do some magic staff in case of better visualization. 
@@ -75,7 +75,7 @@ So, when I usually begin to discover history from data, I spend many hours prepa
 
 ## Ordinal data
 Let's begin from ordinal data, just becouse I want :). Let's see how many attrition in each category of each parameter we have.
-```{r ,echo=FALSE, fig.height = 34, fig.width = 34, fig.align = "center",out.width = '120%'}
+```{r ,warning=FALSE, echo=FALSE, fig.height = 34, fig.width = 34, fig.align = "center",out.width = '120%'}
 df_sum %>% 
   filter(!(parameter %in% col_con)) %>% 
   ggplot(aes(value,fill = Attrition)) +
@@ -88,8 +88,8 @@ df_sum %>%
 
 ```
 
-
-A little bit difficult to understand graph due to imbalanced classes… Let’s invite old friend percent to this party!
+So what we see here? We undersand, that most of employees travel rarely, work in RnD department have bachelor or master degree and etc. But there are some more intresting facts. For exmaple, why we see only two category of performance rating? Is it really true that in IBM all employees do their job so well? Also we se that there are unusual high people that in OverTime category that quit from work. 
+But to tell you the truth,it's a little bit difficult to understand picture due to imbalanced classes… Let’s invite old friend percent to this party!
 
 
 ```{r ,echo=FALSE, fig.height = 34, fig.width = 34, fig.align = "center"}
@@ -109,22 +109,55 @@ df_sum %>%
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
 
+Now we can made absolutly logical conclision that people with frequency bisness trips,low JobInvolment, low Environment, Job, Relotionship  satisfaction and with bad WorkLifeBalance and zero StockOptionLevel more often leave company that the others. One can think that this much trivial conculision, but I must proof it by data, so I do. What about more specific insights? I have it for you) Look carefully on JobRole category. There are something wrong with Sales Representative. Maybe they have terrible directer, or maybe they have to OverTime often.By the way, look at  OverTime section. It is strange, that peoples, who overtime, leave company often, then others. That's maybe mean that peopls work hard but don't feel any feedback from company.
+Now let's see top 5 categories with biggest attrition.
 
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+```{r ,echo=FALSE, fig.height = 14, fig.width = 14, fig.align = "center"}
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+df_sum %>% 
+  filter(!(parameter %in% col_con)) %>% 
+  group_by(parameter,value) %>% 
+  count(Attrition) %>% 
+  ungroup() %>% 
+  group_by(parameter,value) %>% 
+  mutate(prob = n/(n[Attrition == 'No'] + n[Attrition == 'Yes']),
+         all = n[Attrition == 'No'] + n[Attrition == 'Yes']) %>% 
+  select(-n) %>% 
+  spread(Attrition,prob) %>% 
+  # filter(Attrition == 'Yes') %>% 
+  ungroup() %>% 
+  arrange(desc(Yes)) %>% 
+  .[1:5,] %>%
+  gather(Attrition,prob,c(No,Yes)) %>% 
+  mutate(par = as_factor(str_c(parameter,' : \n',value))) %>% 
+  ggplot(aes(par,prob,fill = Attrition)) +
+  geom_col() +
+  geom_label(aes(label = str_c(all * prob )),position = position_stack(vjust = 0.5),size = 7) +
+  theme_pander(lp = 'None',base_size = 10) +
+  labs(y = "Percentage", x = '') +
+  scale_fill_brewer(palette = "Paired") 
 
-```{r cars}
-summary(cars)
 ```
 
-## Including Plots
 
-You can also embed plots, for example:
+Here we see,that categore with highest attrition is JobRole:SalesRepresentive with 33 people that leave company vs 50 that stay. Suprising result is that people with high (24%) PercentSalaryHike leave company, and small numbers of data points give me a thought, that this is just fluctuation and nothing more, but we will keep in mind this fact.
+Now lets dive a little more dipper in details. Let's see how attrition connect with OverTime and sompe other parameters
 
-```{r pressure, echo=FALSE}
-plot(pressure)
+
+```{r ,echo=FALSE, fig.height = 14, fig.width = 14, fig.align = "center"}
+df %>% 
+  select(c(Attrition,YearsAtCompany,PercentSalaryHike,MonthlyIncome,OverTime, YearsSinceLastPromotion)) %>% 
+  gather(parameter,value,-c(Attrition,YearsAtCompany,OverTime)) %>% 
+  ggplot(aes(y = value, x = YearsAtCompany, colour = OverTime)) + 
+  geom_jitter(size = 2, alpha = 0.8) + 
+  geom_smooth(method = "gam") + 
+  facet_wrap(parameter ~ Attrition,labeller = 'label_both',scales = 'free',ncol = 2) + 
+  theme_pander(base_size = 10) +
+  scale_color_brewer(palette = "Paired")
+
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+On each picture on x-axis we have YearsAtCompany for different parameters and different Atttion(on left Attrition = No, on left Attrition = Yes). On first row two pics are almost logical, but people,that don't overTime get more salary on the average.
+On second row we see, that peopls, that work harder, get less percentSalaryHike, that who don't do overTime on the average. Maybe this is effect of averaging, maybe bad work of HR department. On last row we see another intresting fact: people, who leave company and work hard, get promotion less often, instade of peopls, that stay at company. Of course, this is maybe avarage effect, so CEO IBM shouldn't dismisall all HR department :).
+

@@ -71,7 +71,7 @@ res <- df_sum %>%
 # some plots for factor data ----------------------------------------------
 
 
-gg <- df_sum %>% 
+df_sum %>% 
   filter(!(parameter %in% col_con)) %>% 
   ggplot(aes(value,fill = Attrition)) +
   geom_histogram(stat="count") +
@@ -79,6 +79,7 @@ gg <- df_sum %>%
   theme_pander() +
   scale_fill_brewer(palette = "Paired") +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
 
 df_sum %>% 
   filter(!(parameter %in% col_con)) %>% 
@@ -89,7 +90,7 @@ df_sum %>%
   mutate(prob = n/(n[Attrition == 'No'] + n[Attrition == 'Yes'])) %>% 
   ggplot(aes(value,prob *100, fill = Attrition)) +
   geom_col() +
-  labs(y = "Percentage") +
+  labs(y = "Percentage", x = '') +
   facet_wrap(c('parameter'),scales = 'free') +
   theme_pander() +
   scale_fill_brewer(palette = "Paired") +
@@ -101,22 +102,27 @@ df_sum %>%
   count(Attrition) %>% 
   ungroup() %>% 
   group_by(parameter,value) %>% 
-  mutate(prob = n/(n[Attrition == 'No'] + n[Attrition == 'Yes'])) %>% 
-  filter(Attrition == 'Yes') %>% 
+  mutate(prob = n/(n[Attrition == 'No'] + n[Attrition == 'Yes']),
+         all = n[Attrition == 'No'] + n[Attrition == 'Yes']) %>% 
+  select(-n) %>% 
+  spread(Attrition,prob) %>% 
+  # filter(Attrition == 'Yes') %>% 
   ungroup() %>% 
-  arrange(desc(prob)) %>% 
-  .[1:10,] %>% 
+  arrange(desc(Yes)) %>% 
+  .[1:5,] %>%
+  gather(Attrition,prob,c(No,Yes)) %>% 
   mutate(par = as_factor(str_c(parameter,' : \n',value))) %>% 
   ggplot(aes(par,prob,fill = Attrition)) +
   geom_col() +
+  geom_label(aes(label = str_c(all * prob )),position = position_stack(vjust = 0.5),size = 7) +
   theme_pander(lp = 'None') +
   labs(y = "Percentage", x = '') +
-  scale_fill_brewer(palette = "Paired")
+  scale_fill_brewer(palette = "Paired") 
 
 df %>% 
-  filter(JobRole == 'Sales Representative' &JobInvolvement == '1') %>%
-  # filter(JobInvolvement == '1') %>% 
-  gather(parameter,value,-c(id,Attrition,JobRole)) %>% 
+  filter(JobRole == 'Sales Representative') %>%
+  select(-JobRole) %>% 
+  gather(parameter,value,-c(id,Attrition)) %>% 
   filter(!(parameter %in% col_con)) %>% 
   # group_by(parameter,value) %>% 
   # count(Attrition) %>% 
@@ -135,15 +141,15 @@ df %>%
 
 # some plots for count data -----------------------------------------------
 
-
 df %>% 
-  ggplot(aes(y = YearsSinceLastPromotion, x = YearsAtCompany, colour = OverTime)) + 
+  select(c(Attrition,YearsAtCompany,PercentSalaryHike,MonthlyIncome,OverTime, YearsSinceLastPromotion)) %>% 
+  gather(parameter,value,-c(Attrition,YearsAtCompany,OverTime)) %>% 
+  ggplot(aes(y = value, x = YearsAtCompany, colour = OverTime)) + 
   geom_jitter(size = 2, alpha = 0.8) + 
   geom_smooth(method = "gam") + 
-  facet_wrap(~ Attrition,labeller = 'label_both') + 
-  theme_pander() +
+  facet_wrap(c('parameter','Attrition' ),labeller = 'label_both',scales = 'free',ncol = 2) + 
+  theme_pander(boxes = T) +
   scale_color_brewer(palette = "Paired")
-
 
 
 
