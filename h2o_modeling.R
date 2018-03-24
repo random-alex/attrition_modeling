@@ -12,7 +12,7 @@ require(h2o)
 require(lime)
 
 dir <- 'data/data_for_mod.csv'
-h2o.init(nthreads = 11)
+h2o.init(nthreads = 3)
 seed = 1
 
 # functions ---------------------------------------------------------------
@@ -108,11 +108,15 @@ print(x)
   h2o.performance(glm_fit_tuned)
   glm_predict <- h2o.performance(glm_fit_tuned,test)
   h2o.auc(glm_predict,train = T,valid = T)
+  h2o.confusionMatrix(glm_predict)
 }
 
 # try to explain result ---------------------------------------------------
-h2o.varimp_plot(glm_fit_tuned)
-h2o.varimp(glm_fit_tuned)
+h2o.varimp(glm_fit_tuned) %>% 
+  as.tibble() %>% 
+  rename(Feature = names, Importance = coefficients) %>% 
+  .[1:10,]
+
 
 explainer <- lime(
   as.data.frame(train[,-1]),
@@ -122,9 +126,9 @@ explainer <- lime(
 
 to_exp <- as.data.frame(test) %>% 
   # filter(OverTime_Yes == 1) %>% 
-  .[1:140,]
+  .[1:4,]
 
-explanation <- explain(
+explanation <- lime::explain(
   to_exp[,-1],
   # single_explanation = T,
   explainer = explainer,
@@ -136,7 +140,6 @@ explanation <- explain(
 
 #Cannot Continue
 plot_features(explanation)
-
 plot_explanations(explanation)
 tibble::glimpse(explanation)
 

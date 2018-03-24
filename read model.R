@@ -196,8 +196,8 @@ recipe_obj <- df_model %>%
   recipe(formula = ~ .) %>%
   step_rm(id) %>%
   step_zv(all_predictors()) %>%
-  # step_center(col_con) %>%
-  # step_scale(col_con) %>%
+  step_center(col_con) %>%
+  step_scale(col_con) %>%
   step_dummy(all_nominal()) %>% 
   # step_string2factor(Attrition) %>%
   prep(data = df)
@@ -237,6 +237,15 @@ rocv <- roc(as.numeric(test$Attrition), as.numeric(preds))
 rocv$auc
 plot(rocv)
 prop.table(table(test$Attrition, preds, dnn = c("Actual", "Predicted")),1)
+
+mod_glm_imp <- varImp(mod_glm,scale = T)
+
+mod_glm_imp$importance %>% 
+  mutate(parameter = rownames(.)) %>% 
+  as.tibble() %>% 
+  select(parameter,Overall) %>% 
+  arrange(desc(Overall)) %>% 
+  .[1:10,]
 
 
 #Xgboost
@@ -306,7 +315,7 @@ param <- list("objective" = "binary:logistic",
 } 
 
 mod_xgb <- xgb.cv(param,data = train_xgb,
-                  nrounds = 3000,
+                  nrounds = 300,
                   nfold = num.folds,metrics = 'auc')
 mod_xgb$evaluation_log
 params <- mod_xgb$params
@@ -316,14 +325,28 @@ mod_xgb <- xgb.train(params,data = train_xgb,nrounds = 3000)
 preds <- predict(mod_xgb, newdata = test_xgb, type = "prob")
 summary(mod_xgb)
 mod_xgb_imp <- xgb.importance(model = mod_xgb,feature_names = colnames(train_xgb))
+mod_xgb_imp %>% 
+  as.tibble() %>% 
+  select(Feature, Importance) %>% 
+  arrange(desc(Importance))
+mod_xgb_imp %>% 
+  as.tibble() %>% 
+  rename(Importance = Gain) %>%  
+  select(Feature, Importance) %>% 
+  arrange(desc(Importance)) %>% 
+  mutate(Importance = round(Importance,2)) %>% 
+  .[1:10,]
+
+
+
 xgb.ggplot.importance(mod_xgb_imp)
-xgb.plot.multi.trees(mod_xgb)
+xgb.plot.multi.trees(mod_xgb,feature_names = colnames(train_xgb),features_keep = 2)
 
 preds <- predict(mod_xgb, test_xgb,type = 'class')
 rocv <- roc(as.numeric(test$Attrition),preds)
 rocv$auc
 plot(rocv)
-prediction <- as.numeric(preds > 0.01)
+prediction <- as.numeric(preds > 0.05)
 rocv <- roc(as.numeric(test$Attrition),prediction)
 plot(rocv)
 rocv$auc
@@ -338,7 +361,7 @@ explainer <- lime(
 
 to_exp <- as.data.frame(test) %>% 
   # filter(OverTime == 'Yes') %>% 
-  .[1:50,]
+  .[1:5,]
 
 explanation <- lime::explain(
   to_exp[,-1],
