@@ -324,6 +324,7 @@ Not bad for base model. Maybe we can better? Of course we can. Let's try to invi
 
 Look at this metrics:
 
+
 ```{r, echo = F}
 prediction <- as.numeric(preds > 0.5)
 rocv <- roc(as.numeric(test$Attrition),prediction)
