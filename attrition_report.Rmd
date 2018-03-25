@@ -164,15 +164,15 @@ preds <- predict(mod_xgb, test_xgb,type = 'class')
 
 
 ## Motivation
-Here is my attempt to tell you story, that I received from the data. 
-Where is the highest percent of dismissals from work? How does overtime connect with attrition?  Is gender really matter? And many more, if you sit dawn and spend some of you time to read my report)
+Here is my attempt to tell you story, that I have received from the data. 
+Where is the highest percent of dismissals from work? How does overtime connect with attrition?  Is gender really matter? And many more, if you sit dawn and spend some of your time to read my report)
 
 ## Prepare data for exploratory data analysis (EDA)
 So, when I usually begin to discover history from data, I spend many hours prepare and cleaning dataset, but not now! Today I have nice, prepared dataset, and need only to do some magic staff in case of better visualization. 
 
 
 ## Ordinal data
-Let's begin from ordinal data, just becouse I want :). Let's see how many attrition in each category of each parameter we have.
+Let's begin from ordinal data, just because I want :). Let's see how many attrition in each category of each parameter we have.
 ```{r ,warning=FALSE, echo=FALSE, fig.height = 44, fig.width = 35, fig.align = "center",out.width = '120%'}
 df_sum %>% 
   filter(!(parameter %in% col_con)) %>% 
@@ -188,9 +188,8 @@ df_sum %>%
 
 ```
 
-So what we see here? We undersand, that most of employees travel rarely, work in RnD department have bachelor or master degree and etc. But there are some more intresting facts. For exmaple, why we see only two category of performance rating? Is it really true that in IBM all employees do their job so well? Also we se that there are unusual high people that in OverTime category that quit from work. 
+So what we see here? We understand, that most of employees travel rarely, work in RnD department, have bachelor or master degree and etc. But there are some more interesting facts. For example, why we see only two category of performance rating? Is it really true that in IBM all employees do their job so well? Also we see that there are unusually a lot of people in OverTime category that quit from work. 
 But to tell you the truth,it's a little bit difficult to understand picture due to imbalanced classes… Let’s invite old friend percent to this party!
-
 
 ```{r ,echo=FALSE, fig.height = 44, fig.width = 35, fig.align = "center",out.width = '120%'}
 df_sum %>% 
@@ -213,9 +212,8 @@ df_sum %>%
 
 ```
 
-Now we can made absolutly logical conclision that people with frequency bisness trips,low JobInvolment, low Environment, Job, Relotionship  satisfaction and with bad WorkLifeBalance and zero StockOptionLevel more often leave company that the others. One can think that this much trivial conculision, but I must proof it by data, so I do. What about more specific insights? I have it for you) Look carefully on JobRole category. There are something wrong with Sales Representative. Maybe they have terrible directer, or maybe they have to OverTime often.By the way, look at  OverTime section. It is strange, that peoples, who overtime, leave company often, then others. That's maybe mean that peopls work hard but don't feel any feedback from company.
-Now let's see top 5 categories with biggest attrition.
-
+Now we can made absolutely logical conclusion that people with frequent business trips,low JobInvolment, low Environment, Job, Relationship  satisfaction and with bad WorkLifeBalance and zero StockOptionLevel more often leave company then the others. One can think that this much trivial conclusion, but I must proof it by data, so I do. What about more specific insights? I have it for you) Look carefully on JobRole category. There are something wrong with Sales Representative. Maybe they have terrible director, or maybe they have to OverTime often. By the way, look at  OverTime section. It is strange, that peoples, who overtime, leave company often, then others. That's maybe mean that people work hard but don't feel any feedback from company.
+Now let's see top 5 categories with the biggest attrition.
 
 ```{r ,echo=FALSE, fig.height = 14, fig.width = 15, fig.align = "center",out.width = '120%'}
 
@@ -245,9 +243,8 @@ df_sum %>%
 ```
 
 
-Here we see,that categore with highest attrition is JobRole:SalesRepresentive with 33 people that leave company vs 50 that stay. Suprising result is that people with high (24%) PercentSalaryHike leave company, and small numbers of data points give me a thought, that this is just fluctuation and nothing more, but we will keep in mind this fact.
-Now lets dive a little more dipper in details. Let's see how attrition connect with OverTime and sompe other parameters
-
+Here we see,that category with the highest attrition is JobRole:SalesRepresentive with 33 people that leave company vs 50 that stay. Suprising result is that people with high (24%) PercentSalaryHike leave company, but small numbers of data points give me a thought, that this is just fluctuation and nothing more, but we will keep in mind this fact.
+Now lets dive a little more dipper in details. Let's see how attrition connect with OverTime and some other parameters
 
 ```{r ,echo=FALSE, fig.height = 15, fig.width = 20, fig.align = "center"}
 df %>% 
@@ -265,10 +262,9 @@ df %>%
 
 ```
 
-On each picture on x-axis we have YearsAtCompany for different parameters and different Atttion(on left Attrition = No, on left Attrition = Yes). On first row two pics are almost logical, but people,that don't overTime get more salary on the average.
-On second row we see, that peopls, that work harder, get less percentSalaryHike, that who don't do overTime on the average. Maybe this is effect of averaging, maybe bad work of HR department. On last row we see another intresting fact: people, who leave company and work hard, get promotion less often, instade of peopls, that stay at company. Of course, this is maybe avarage effect, so CEO IBM shouldn't dismisall all HR department :).
-Now let's look at the problem of attrition from other side, from continuos data side.
-
+On each picture on x-axis we have YearsAtCompany for different parameters and different Attrition(on left Attrition = No, on left Attrition = Yes). At the first row two pictures are almost logical, but people,that don't OverTime get more salary on the average.
+At the second row we see, that people, that work harder, get less percentSalaryHike, then those who don't overTime on the average. Maybe this is effect of averaging, maybe bad work of HR department. At the last row we see another interesting fact: people, who leave company and work hard, get promotion less often, instead of people, that stay at company. Of course, this is maybe average effect, so CEO IBM shouldn't dismissal all HR department :).
+Now let's look at the problem of attrition from other side, from continuous data side.
 ```{r ,echo=FALSE, fig.height = 12, fig.width = 20, fig.align = "center"}
 
 df_sum %>% 
@@ -285,16 +281,15 @@ df_sum %>%
         legend.title = element_text(size=30),legend.box.margin = margin(10,10,10,10))
 
 ```
-What we see now? There are some intresting thing - after about five years of work in current role or with current manager number of attrition incrise. Of course, there are some trivial conclutions such as older people don't like change work as usul, so percent of attrition smaller when people are older. If you like more digits and pairwise correlation, scroll to the end of report and you will get picture with a lot of of this staff)
+What we see now? There are some interesting thing - after about five years of work in current role or with current manager number of attrition increase. Of course, there are some trivial conclusions such as older people don't like change work as usual, so percent of attrition smaller when people are older. If you like more digits and pairwise correlation, scroll to the end of report and you will get picture with a lot of of this staff)
 
-So, we are looking in data set a lot and now we a ready for some 
+So, we are looking in data set a lot and now we a ready for some...
 
 ## Modeling
-Let's begin with simple and powerfull method - logistic regresion. I don't want to scare wou with formulas and other mathematical staff, just think about it as a black magic box, that can give you a probability of certain class of test data point.
+Let's begin with simple and powerful method - logistic regression. I don't want to scare you with formulas and other mathematical staff, just think about it as a black magic box, that can give you a probability of certain class of test data point.
 First of all, we need prepare data for modeling. To do so, I will use ```recipes``` package.
 
-Let's se some metrics. Think of AUC as bigger value better, max value = 1
-
+Let's see some metrics. Think of AUC as bigger value better, max value = 1
 ```{r ,echo=F}
 cat(str_c('Calculated AUC = ', round(rocv$auc,2),'\nTable of correct and wrong classification \n'))
 prediction <- as.numeric(as.numeric(preds) > 0.5)
@@ -317,9 +312,9 @@ mod_glm_imp$importance %>%
   .[1:10,]
 
 ```
-So as we see from EDA, OverTime is very important feature, and EnvironmentSatisfaction_Low is more importan, then JobInvolvement_Low and RelationshipSatisfaction_Low.
+So as we see from EDA, OverTime is very important feature, and EnvironmentSatisfaction_Low is more important, then JobInvolvement_Low and RelationshipSatisfaction_Low.
 
-Not bad for base model. Maybe we can better? Of course we can. Let's try to invate XGBoost
+Not bad for base model. Maybe we can better? Of course we can. Let's try to invite XGBoost
 
 
 ```{r , echo=F}
@@ -329,7 +324,6 @@ Not bad for base model. Maybe we can better? Of course we can. Let's try to inva
 
 Look at this metrics:
 
-
 ```{r, echo = F}
 prediction <- as.numeric(preds > 0.5)
 rocv <- roc(as.numeric(test$Attrition),prediction)
@@ -338,8 +332,8 @@ cat('Table of correct and wrong classification \n',
     prop.table(table(test$Attrition, prediction, dnn = c("Actual", "Predicted")),1))
 
 ```
-Hmmm... What?? Usually XGBoost makes better classification better, then logistic regretion, but not today. 
-Let's look at importance of variables
+Hmmm... What?? Usually XGBoost makes better classification better, then logistic regression, but not today. 
+Let's look at importance of variables again and compare it with previous result
 
 ```{r, echo=F}
 
@@ -354,7 +348,8 @@ mod_xgb_imp %>%
 
 ```
 
-Again, OverTIme is in top of most important feature. So, if you see, that you researcher is again working after eight p.m., don't listen to him, sent him to home :)
+
+Again, OverTIme is in top of most important feature. So, if you see, that you researcher again works after eight p.m., don't listen to him, send him to home :)
 
 And time to heavy weapons, time to load H2O.
 
@@ -420,7 +415,7 @@ x <- setdiff(names(data), c(y,'ID'))  #remove the interest rate column because i
   
   
 ```
-Connection sucsesfull, great. Let's again begin with logistic regression but with grid search for best fitting parameters
+Connection successful, great. Let's again begin with logistic regression but with grid search for best fitting parameters
 
 ```{r, echo=F}
 glm_fit_tuned <- h2o.glm(x = x, 
@@ -437,7 +432,7 @@ glm_fit_tuned <- h2o.glm(x = x,
 
 ```
 
-To tell you the truth, I love H2O. This is powerfull and comfortable framework for ML.
+To tell you the truth, I love H2O. This is powerful and comfortable framework for ML.
 Let's look at some metrics
 
 ```{r, echo=F}
@@ -446,7 +441,7 @@ Let's look at some metrics
   h2o.confusionMatrix(glm_predict)
 
 ```
-Wow!! Very nice AUC! Now time to look at variable importance:
+Wow!! Very nice AUC for test dataset! Now time to look at variable importance:
 
 
 
@@ -457,13 +452,10 @@ h2o.varimp(glm_fit_tuned) %>%
   .[1:10,]
 
 ```
-Again, OverTime_Yes tends to give more impact on attrtion.
+So, now it's time to make some general conclusions. First of all, do something with Sales representative, they leave company too often. Secondly, look carefully after workaholics with OverTime, maybe you don't promote or increase salary as well as they work. Thirdly, don't forget about workers, that travel frequently, they tend to be tired and leave company, probably it will be good idea to give one day vacation after business trip. And of course, don't forget to work with such trivial, but important things as Environment Satisfaction,Job Satisfaction. 
 
 
-So, now it's time to make some general conclusions. First of all, do something with Sales representative, they leave company too often. Second, look carefully after hardwokers with OverTime, maybe you don't promote or increase salary as well as they work. Thirdly, don't forget about workers, that travel frequently, they tend to be tired and leave company, maybe it will be good idea to give one day vacation after bisness trip. And of course, don't forget to work with such trivial, but important things as Environment Satisfaction,Job Satisfactio. 
-
-
-## P.s. We need more data for data God ))
+## P.s. Promised picture with a lot of pairwise correlation
 
 Picture with as much information about numerical data as I could paste in one box
 ```{r ,echo=FALSE,, fig.height = 16, fig.width = 20, fig.align = "center"}
