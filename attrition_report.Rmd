@@ -328,8 +328,8 @@ Look at this metrics:
 prediction <- as.numeric(preds > 0.5)
 rocv <- roc(as.numeric(test$Attrition),prediction)
 cat(str_c('Calculated AUC = ', round(rocv$auc,2),'\n'))
-cat('Table of correct and wrong classification \n',
-    prop.table(table(test$Attrition, prediction, dnn = c("Actual", "Predicted")),1))
+cat('Table of correct and wrong classification \n')
+prop.table(table(test$Attrition, prediction, dnn = c("Actual", "Predicted")),1)
 
 ```
 Hmmm... What?? Usually XGBoost makes better classification better, then logistic regression, but not today. 
